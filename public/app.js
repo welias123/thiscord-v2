@@ -306,6 +306,21 @@ function connectSocket() {
     if (e.message === 'Unauthorized') logout();
   });
 
+  socket.on('server-updating', ({ message }) => {
+    showUpdateBanner(message);
+  });
+
+  // After reconnect following a server restart → show "updated" toast
+  let wasDisconnected = false;
+  socket.on('disconnect', () => { wasDisconnected = true; });
+  socket.on('connect', () => {
+    if (wasDisconnected) {
+      wasDisconnected = false;
+      hideUpdateBanner();
+      toast('✅ App wurde aktualisiert!', 'success');
+    }
+  });
+
   socket.on('message', (m) => {
     if (activeView?.type === 'channel' && activeView.id === m.channel_id) appendMessage(m);
   });
@@ -791,6 +806,30 @@ function showChatUI() {
 
 function esc(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showUpdateBanner(msg) {
+  let banner = document.getElementById('update-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'update-banner';
+    banner.style.cssText = `
+      position:fixed; top:0; left:0; right:0; z-index:9999;
+      background:linear-gradient(90deg,#7c3aed,#a855f7);
+      color:#fff; text-align:center; padding:10px 16px;
+      font-size:14px; font-weight:600; letter-spacing:.3px;
+      display:flex; align-items:center; justify-content:center; gap:10px;
+      box-shadow:0 2px 12px rgba(124,58,237,.5);
+      animation: slideDown .3s ease;
+    `;
+    document.body.appendChild(banner);
+  }
+  const spinner = '<span style="display:inline-block;animation:spin 1s linear infinite">⟳</span>';
+  banner.innerHTML = `${spinner} ${msg}`;
+}
+
+function hideUpdateBanner() {
+  document.getElementById('update-banner')?.remove();
 }
 
 function toast(msg, type = 'info') {

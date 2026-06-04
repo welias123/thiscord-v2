@@ -228,6 +228,8 @@ textarea { resize:vertical; min-height:80px; font-family:inherit; }
   animation: fadeIn .2s ease;
 }
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+@keyframes slideDown { from{transform:translateY(-100%)} to{transform:translateY(0)} }
+@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 .modal {
   background:var(--surface); border:1px solid var(--border); border-radius:16px;
   padding:28px; width:100%; max-width:460px; animation:fadeUp .25s ease;

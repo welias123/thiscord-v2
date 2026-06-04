@@ -68,6 +68,8 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   if (sig !== WEBHOOK_SECRET) return res.status(403).json({ error: 'Forbidden' });
   res.json({ ok: true });
   console.log('[webhook] Update received — pulling and restarting…');
+  // Notify all connected clients before restarting
+  io.emit('server-updating', { message: '🔄 App wird aktualisiert — gleich wieder da!' });
   setTimeout(() => {
     try {
       execSync('git pull', { cwd: __dirname, stdio: 'inherit' });
@@ -75,8 +77,9 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
       execSync('pm2 restart thiscord', { stdio: 'inherit' });
     } catch (e) {
       console.error('[webhook] Update failed:', e.message);
+      io.emit('server-updating', { message: '❌ Update fehlgeschlagen.' });
     }
-  }, 500);
+  }, 800);
 });
 
 // ── Middleware ────────────────────────────────────────────────────────
