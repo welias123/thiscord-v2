@@ -530,7 +530,9 @@ let micGain = Number(localStorage.getItem('tc-mic-volume') || 100);
 
 async function loadAudioDevices() {
   try {
-    await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Request permission first so device labels are visible
+    const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+    tmp.getTracks().forEach(t => t.stop()); // stop immediately, just needed for permission
     const devices = await navigator.mediaDevices.enumerateDevices();
     const mics = devices.filter(d => d.kind === 'audioinput');
     const speakers = devices.filter(d => d.kind === 'audiooutput');
