@@ -27,10 +27,19 @@ async function api(method, path, body) {
 
 // ── Init ──────────────────────────────────────────────────────────────
 async function init() {
-  try {
-    me = await api('GET', '/api/me');
-    localStorage.setItem('tc-user', JSON.stringify(me));
-  } catch { logout(); return; }
+  // Retry up to 5x if server is momentarily restarting
+  let tries = 0;
+  while (true) {
+    try {
+      me = await api('GET', '/api/me');
+      localStorage.setItem('tc-user', JSON.stringify(me));
+      break;
+    } catch(e) {
+      tries++;
+      if (tries >= 5) { logout(); return; }
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
 
   updateMyPanel();
   document.getElementById('app').style.display = 'flex';

@@ -54,10 +54,11 @@ loadData();
   }
 });
 
-// Save every 15s + on shutdown
-setInterval(saveData, 15000);
+// Save every 10s + on every shutdown signal
+setInterval(saveData, 10000);
 process.on('SIGTERM', () => { saveData(); process.exit(0); });
 process.on('SIGINT',  () => { saveData(); process.exit(0); });
+process.on('exit',    () => { saveData(); });
 
 // ── Auto-Update Webhook ───────────────────────────────────────────────
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'thiscord-webhook-2026';
