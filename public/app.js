@@ -544,28 +544,42 @@ let selectedSpeakerId = localStorage.getItem('tc-speaker-id') || '';
 let micGain = Number(localStorage.getItem('tc-mic-volume') || 100);
 
 async function loadAudioDevices() {
-  try {
-    // Request permission first so device labels are visible
-    const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
-    tmp.getTracks().forEach(t => t.stop()); // stop immediately, just needed for permission
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const mics = devices.filter(d => d.kind === 'audioinput');
-    const speakers = devices.filter(d => d.kind === 'audiooutput');
+  const micSel = document.getElementById('audio-mic-select');
+  const spkSel = document.getElementById('audio-speaker-select');
 
-    const micSel = document.getElementById('audio-mic-select');
-    const spkSel = document.getElementById('audio-speaker-select');
-    micSel.innerHTML = mics.map(d => `<option value="${d.deviceId}" ${d.deviceId===selectedMicId?'selected':''}>${d.label||'Mikrofon '+d.deviceId.slice(0,6)}</option>`).join('');
-    spkSel.innerHTML = speakers.length
-      ? speakers.map(d => `<option value="${d.deviceId}" ${d.deviceId===selectedSpeakerId?'selected':''}>${d.label||'Lautsprecher '+d.deviceId.slice(0,6)}</option>`).join('')
-      : '<option value="">Standard-Ausgabe</option>';
+  // Try to get devices — first without permission, then with
+  let devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+  const needsPermission = devices.filter(d => d.kind === 'audioinput').every(d => !d.label);
 
-    document.getElementById('mic-volume').value = micGain;
+  if (needsPermission) {
+    try {
+      const tmp = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      tmp.getTracks().forEach(t => t.stop());
+      devices = await navigator.mediaDevices.enumerateDevices();
+    } catch {
+      micSel.innerHTML = '<option value="">⚠️ Kein Zugriff — Erlaubnis im Browser erteilen!</option>';
+      spkSel.innerHTML = '<option value="">Standard-Ausgabe</option>';
+      return;
+    }
+  }
+
+  const mics     = devices.filter(d => d.kind === 'audioinput');
+  const speakers = devices.filter(d => d.kind === 'audiooutput');
+
+  micSel.innerHTML = mics.length
+    ? mics.map((d, i) => `<option value="${d.deviceId}" ${d.deviceId===selectedMicId?'selected':''}>${d.label || `Mikrofon ${i+1}`}</option>`).join('')
+    : '<option value="">Kein Mikrofon gefunden</option>';
+
+  spkSel.innerHTML = speakers.length
+    ? speakers.map((d, i) => `<option value="${d.deviceId}" ${d.deviceId===selectedSpeakerId?'selected':''}>${d.label || `Lautsprecher ${i+1}`}</option>`).join('')
+    : '<option value="">Standard-Ausgabe</option>';
+
+  document.getElementById('mic-volume').value = micGain;
+  document.getElementById('mic-vol-label').textContent = micGain;
+  document.getElementById('mic-volume').oninput = e => {
+    micGain = e.target.value;
     document.getElementById('mic-vol-label').textContent = micGain;
-    document.getElementById('mic-volume').addEventListener('input', e => {
-      micGain = e.target.value;
-      document.getElementById('mic-vol-label').textContent = micGain;
-    });
-  } catch { toast('Mikrofon-Zugriff verweigert', 'error'); }
+  };
 }
 
 async function startMicTest() {
