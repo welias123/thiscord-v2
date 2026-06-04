@@ -28,6 +28,12 @@
     </div>
     <div id="channel-list"></div>
 
+    <!-- Voice Channels -->
+    <div class="sidebar-section" style="margin-top:8px">
+      <div class="sidebar-label">Sprachkanäle</div>
+    </div>
+    <div id="voice-channel-list"></div>
+
     <!-- DMs -->
     <div class="sidebar-section" style="margin-top:8px">
       <div class="sidebar-label">Direktnachrichten</div>
@@ -153,6 +159,14 @@
     <div class="pending-label">Freunde</div>
     <div id="friends-list"><div style="color:var(--muted);font-size:13px;padding:8px">Noch keine Freunde 😢</div></div>
   </div>
+</div>
+
+<!-- Voice UI overlay -->
+<div id="voice-bar" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1a1a2a;border-top:1px solid #2a2a45;padding:10px 20px;display:none;align-items:center;gap:12px;z-index:100">
+  <div style="color:#22c55e;font-size:13px;font-weight:700">🔊 Verbunden: <span id="voice-room-name"></span></div>
+  <div id="voice-members-bar" style="display:flex;gap:8px;flex:1"></div>
+  <button onclick="leaveVoice()" style="background:#ef4444;border:none;border-radius:8px;color:#fff;padding:6px 14px;cursor:pointer;font-weight:700">Verlassen</button>
+  <button id="mute-btn" onclick="toggleMute()" style="background:#2a2a45;border:none;border-radius:8px;color:#fff;padding:6px 14px;cursor:pointer;font-weight:700">🎤 Stummschalten</button>
 </div>
 
 <!-- Toast container -->

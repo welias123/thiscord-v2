@@ -76,12 +76,13 @@ const AVATAR_COLORS = ['#7c3aed','#a855f7','#ec4899','#06b6d4','#10b981','#f59e0
 app.post('/api/auth/register', (req, res) => {
   const { username, email, password } = req.body || {};
   if (!username?.trim() || !email?.trim() || !password) return res.status(400).json({ error: 'Alle Felder ausfüllen' });
-  if (username.length < 2 || username.length > 32) return res.status(400).json({ error: 'Benutzername: 2–32 Zeichen' });
-  if (password.length < 6) return res.status(400).json({ error: 'Passwort: mindestens 6 Zeichen' });
-  if (!/^[^@]+@[^@]+\.[^@]+$/.test(email)) return res.status(400).json({ error: 'Ungültige E-Mail' });
-  const uname = username.trim();
+  const uname  = username.trim();
   const uemail = email.trim().toLowerCase();
-  if (users.find(u => u.username.toLowerCase() === uname.toLowerCase())) return res.status(400).json({ error: 'Benutzername vergeben' });
+  if (!/^[a-zA-Z0-9._-]{2,32}$/.test(uname)) return res.status(400).json({ error: 'Benutzername: 2–32 Zeichen, nur Buchstaben/Zahlen/._-' });
+  if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(uemail)) return res.status(400).json({ error: 'Ungültige E-Mail-Adresse' });
+  if (password.length < 8) return res.status(400).json({ error: 'Passwort: mindestens 8 Zeichen' });
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) return res.status(400).json({ error: 'Passwort braucht Buchstaben und Zahlen' });
+  if (users.find(u => u.username.toLowerCase() === uname.toLowerCase())) return res.status(400).json({ error: 'Benutzername bereits vergeben' });
   if (users.find(u => u.email === uemail)) return res.status(400).json({ error: 'E-Mail bereits registriert' });
   const hash  = bcrypt.hashSync(password, 10);
   const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
@@ -216,6 +217,15 @@ app.get('/api/dm/:userId', auth, (req, res) => {
   res.json(msgs);
 });
 
+// ── Voice channels ────────────────────────────────────────────────────
+const DEFAULT_VOICE = ['Lounge', 'Gaming', 'Musik'];
+let voiceChannels = {};
+DEFAULT_VOICE.forEach(n => { voiceChannels[n] = []; });
+
+app.get('/api/voice-channels', auth, (req, res) => res.json(
+  Object.entries(voiceChannels).map(([name, members]) => ({ name, members }))
+));
+
 // ── Socket.io ─────────────────────────────────────────────────────────
 const onlineUsers = new Map();
 
@@ -258,8 +268,48 @@ io.on('connection', (socket) => {
   socket.on('typing',    ({ channelId }) => socket.to(`ch:${channelId}`).emit('typing', { username: socket.user.username, channelId }));
   socket.on('dm-typing', ({ toUserId })  => io.to(`user:${toUserId}`).emit('dm-typing', { from: socket.user.username }));
 
+  // ── Voice ──────────────────────────────────────────────────────────
+  socket.on('voice-join', ({ room }) => {
+    // Leave old room first
+    if (socket.voiceRoom) {
+      voiceChannels[socket.voiceRoom] = (voiceChannels[socket.voiceRoom] || []).filter(m => m.userId !== uid);
+      socket.to(`voice:${socket.voiceRoom}`).emit('voice-user-left', { userId: uid });
+      socket.leave(`voice:${socket.voiceRoom}`);
+    }
+    if (!voiceChannels[room]) voiceChannels[room] = [];
+    const u = users.find(u => u.id === uid);
+    const member = { userId: uid, username: socket.user.username, avatar_color: u?.avatar_color, socketId: socket.id };
+    // Send existing members to joiner so they can initiate offers
+    socket.emit('voice-members', voiceChannels[room]);
+    voiceChannels[room].push(member);
+    socket.voiceRoom = room;
+    socket.join(`voice:${room}`);
+    socket.to(`voice:${room}`).emit('voice-user-joined', member);
+    io.emit('voice-state', voiceChannels);
+  });
+
+  socket.on('voice-leave', () => {
+    if (!socket.voiceRoom) return;
+    voiceChannels[socket.voiceRoom] = (voiceChannels[socket.voiceRoom] || []).filter(m => m.userId !== uid);
+    socket.to(`voice:${socket.voiceRoom}`).emit('voice-user-left', { userId: uid });
+    socket.leave(`voice:${socket.voiceRoom}`);
+    io.emit('voice-state', voiceChannels);
+    socket.voiceRoom = null;
+  });
+
+  // WebRTC signaling relay
+  socket.on('voice-signal', ({ to, signal }) => {
+    io.to(to).emit('voice-signal', { from: socket.id, fromUser: socket.user.username, signal });
+  });
+
   socket.on('disconnect', () => {
     onlineUsers.delete(uid);
+    // Leave voice room on disconnect
+    if (socket.voiceRoom) {
+      voiceChannels[socket.voiceRoom] = (voiceChannels[socket.voiceRoom] || []).filter(m => m.userId !== uid);
+      socket.to(`voice:${socket.voiceRoom}`).emit('voice-user-left', { userId: uid });
+      io.emit('voice-state', voiceChannels);
+    }
     io.emit('user-status', { userId: uid, online: false });
   });
 });

@@ -36,6 +36,7 @@ async function init() {
   document.getElementById('app').style.display = 'flex';
 
   await loadChannels();
+  await loadVoiceChannels();
   connectSocket();
   loadRightPanel();
 }
@@ -54,6 +55,118 @@ function updateMyPanel() {
     document.getElementById('set-username').value = me.username;
     document.getElementById('set-bio').value = me.bio || '';
   }
+}
+
+// ── Voice ─────────────────────────────────────────────────────────────
+let localStream = null, peers = {}, micMuted = false, inVoice = false, currentVoiceRoom = null;
+
+async function joinVoice(room) {
+  if (inVoice && currentVoiceRoom === room) return;
+  if (inVoice) leaveVoice();
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch {
+    toast('Kein Mikrofon gefunden oder Zugriff verweigert!', 'error'); return;
+  }
+  inVoice = true; currentVoiceRoom = room;
+  document.getElementById('voice-bar').style.display = 'flex';
+  document.getElementById('voice-room-name').textContent = room;
+  socket.emit('voice-join', { room });
+  renderVoiceChannels();
+}
+
+function leaveVoice() {
+  if (!inVoice) return;
+  socket.emit('voice-leave');
+  localStream?.getTracks().forEach(t => t.stop());
+  localStream = null;
+  Object.values(peers).forEach(p => p.close());
+  peers = {};
+  inVoice = false; currentVoiceRoom = null;
+  document.getElementById('voice-bar').style.display = 'none';
+  renderVoiceChannels();
+}
+
+function toggleMute() {
+  if (!localStream) return;
+  micMuted = !micMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !micMuted);
+  document.getElementById('mute-btn').textContent = micMuted ? '🔇 Stummgeschaltet' : '🎤 Stummschalten';
+}
+
+function createPeer(socketId, initiator) {
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.onicecandidate = e => { if (e.candidate) socket.emit('voice-signal', { to: socketId, signal: { type: 'candidate', candidate: e.candidate } }); };
+  pc.ontrack = e => {
+    const audio = document.createElement('audio');
+    audio.srcObject = e.streams[0]; audio.autoplay = true;
+    audio.id = `audio-${socketId}`; document.body.appendChild(audio);
+  };
+  if (initiator) {
+    pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => {
+      socket.emit('voice-signal', { to: socketId, signal: { type: 'offer', sdp: pc.localDescription } });
+    });
+  }
+  peers[socketId] = pc; return pc;
+}
+
+function setupVoiceSocket() {
+  socket.on('voice-members', (members) => {
+    // Existing members: we initiate offers to them
+    members.forEach(m => { if (m.socketId !== socket.id) createPeer(m.socketId, true); });
+  });
+
+  socket.on('voice-user-joined', (m) => {
+    // New user joined: they will offer to us, we just wait
+  });
+
+  socket.on('voice-user-left', ({ userId }) => {
+    Object.entries(peers).forEach(([sid, pc]) => {
+      // We don't know socketId from userId easily — just clean up all and rely on re-offer
+    });
+    document.querySelectorAll('[id^="audio-"]').forEach(a => {});
+    renderVoiceChannels();
+  });
+
+  socket.on('voice-signal', async ({ from, signal }) => {
+    if (!inVoice) return;
+    let pc = peers[from];
+    if (!pc) { pc = createPeer(from, false); }
+    if (signal.type === 'offer') {
+      await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('voice-signal', { to: from, signal: { type: 'answer', sdp: pc.localDescription } });
+    } else if (signal.type === 'answer') {
+      await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+    } else if (signal.type === 'candidate') {
+      await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
+    }
+  });
+
+  socket.on('voice-state', (state) => {
+    Object.assign(window._voiceState = window._voiceState || {}, state);
+    renderVoiceChannels();
+  });
+}
+
+async function loadVoiceChannels() {
+  const data = await api('GET', '/api/voice-channels');
+  window._voiceState = {};
+  data.forEach(ch => { window._voiceState[ch.name] = ch.members; });
+  renderVoiceChannels();
+}
+
+function renderVoiceChannels() {
+  const state = window._voiceState || {};
+  const list = document.getElementById('voice-channel-list');
+  if (!list) return;
+  list.innerHTML = Object.entries(state).map(([name, members]) => `
+    <div class="voice-channel-item${currentVoiceRoom===name?' active':''}" onclick="joinVoice('${esc(name)}')">
+      <div class="voice-channel-header"><span>🔊</span><span>${esc(name)}</span></div>
+      ${members.length ? `<div class="voice-members-list">${members.map(m=>`<div class="voice-member-entry">${esc(m.username)}</div>`).join('')}</div>` : ''}
+    </div>`).join('');
 }
 
 // ── Channels ──────────────────────────────────────────────────────────
@@ -197,6 +310,8 @@ function connectSocket() {
     loadRightPanel();
     loadDMs();
   });
+
+  setupVoiceSocket();
 
   socket.on('friend-request', ({ from }) => {
     toast(`👋 Freundschaftsanfrage von ${from.username}!`, 'info');

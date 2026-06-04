@@ -257,6 +257,18 @@ textarea { resize:vertical; min-height:80px; font-family:inherit; }
 .toast.error { border-color:rgba(239,68,68,.4); color:#fca5a5; }
 .toast.info { border-color:rgba(124,58,237,.4); color:#c4b5fd; }
 
+/* Voice channels */
+.voice-channel-item {
+  display:flex; flex-direction:column; padding:6px 10px; border-radius:8px;
+  cursor:pointer; color:var(--muted); font-size:14px; font-weight:500; transition:.15s; margin:1px 0;
+}
+.voice-channel-item:hover { background:var(--surface); color:var(--text); }
+.voice-channel-item.active { background:var(--surface2); color:#fff; }
+.voice-channel-header { display:flex; align-items:center; gap:8px; }
+.voice-members-list { padding:4px 0 0 24px; display:flex; flex-direction:column; gap:3px; }
+.voice-member-entry { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+.voice-member-entry::before { content:'🔊'; font-size:10px; }
+
 /* Add friend form */
 .add-friend-form { display:flex; gap:8px; margin-bottom:16px; }
 .add-friend-form input { flex:1; }
