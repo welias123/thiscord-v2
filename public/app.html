@@ -42,7 +42,10 @@
 
     <!-- User panel -->
     <div class="user-panel">
-      <div class="my-avatar" id="my-avatar" onclick="openSettings()">?</div>
+      <div style="position:relative;cursor:pointer" onclick="openSettings()">
+        <div class="my-avatar" id="my-avatar">?</div>
+        <span id="my-status-dot" style="position:absolute;bottom:0;right:0;width:11px;height:11px;border-radius:50%;background:var(--online);border:2px solid var(--sidebar)"></span>
+      </div>
       <div style="flex:1;min-width:0;cursor:pointer" onclick="openSettings()">
         <div class="my-name" id="my-name">...</div>
         <div class="my-tag" id="my-tag">Einstellungen</div>
@@ -94,41 +97,96 @@
       <button class="modal-close" onclick="closeModal('modal-settings')">✕</button>
     </div>
 
-    <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px">
-      <div class="my-avatar" id="settings-avatar" style="width:56px;height:56px;font-size:22px">?</div>
-      <div>
-        <div style="font-weight:700;font-size:16px" id="settings-name-disp"></div>
-        <div style="font-size:12px;color:var(--muted)" id="settings-email-disp"></div>
+    <div class="settings-tabs">
+      <button class="settings-tab active" onclick="switchSettingsTab('profile',this)">Profil</button>
+      <button class="settings-tab" onclick="switchSettingsTab('audio',this)">🎤 Audio</button>
+      <button class="settings-tab" onclick="switchSettingsTab('status',this)">Status</button>
+    </div>
+
+    <!-- Profil Tab -->
+    <div id="settings-tab-profile">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px">
+        <div class="my-avatar" id="settings-avatar" style="width:56px;height:56px;font-size:22px">?</div>
+        <div>
+          <div style="font-weight:700;font-size:16px" id="settings-name-disp"></div>
+          <div style="font-size:12px;color:var(--muted)" id="settings-email-disp"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Avatar-Farbe</label>
+        <div class="color-picker" id="color-picker"></div>
+      </div>
+      <div class="form-group">
+        <label>Benutzername</label>
+        <input type="text" id="set-username" maxlength="32"/>
+      </div>
+      <div class="form-group">
+        <label>Bio</label>
+        <textarea id="set-bio" placeholder="Erzähl was über dich…" maxlength="200"></textarea>
+      </div>
+      <div id="set-err" class="error-msg"></div>
+      <div id="set-suc" class="success-msg"></div>
+      <button class="btn btn-primary" onclick="saveSettings()">Speichern</button>
+      <div class="divider"></div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px">Passwort ändern</div>
+      <div class="form-group"><label>Aktuelles Passwort</label><input type="password" id="set-pw-cur" placeholder="••••••••"/></div>
+      <div class="form-group"><label>Neues Passwort</label><input type="password" id="set-pw-new" placeholder="Mindestens 8 Zeichen + Zahlen"/></div>
+      <div id="set-pw-err" class="error-msg"></div>
+      <div id="set-pw-suc" class="success-msg"></div>
+      <button class="btn btn-secondary" onclick="changePassword()">Passwort ändern</button>
+      <div class="divider"></div>
+      <button class="btn btn-danger" onclick="logout()">Abmelden</button>
+    </div>
+
+    <!-- Audio Tab -->
+    <div id="settings-tab-audio" style="display:none">
+      <div class="form-group">
+        <label>🎤 Mikrofon</label>
+        <select id="audio-mic-select"></select>
+      </div>
+      <div class="form-group">
+        <label>🔊 Ausgabe (Lautsprecher)</label>
+        <select id="audio-speaker-select"></select>
+      </div>
+      <div class="form-group">
+        <label>Mikrofon testen</label>
+        <div class="audio-test-bar"><div class="audio-test-fill" id="audio-test-fill"></div></div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" id="audio-test-btn" onclick="startMicTest()">▶ Test starten</button>
+          <button class="btn btn-secondary btn-sm" id="audio-stop-btn" onclick="stopMicTest()" style="display:none">⏹ Stoppen</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px">Sprich ins Mikrofon — der Balken zeigt die Lautstärke</div>
+      </div>
+      <div class="form-group">
+        <label>Eingangslautstärke</label>
+        <input type="range" id="mic-volume" min="0" max="200" value="100" style="width:100%;accent-color:var(--purple)"/>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px"><span id="mic-vol-label">100</span>%</div>
+      </div>
+      <button class="btn btn-primary" onclick="saveAudioSettings()">Einstellungen speichern</button>
+    </div>
+
+    <!-- Status Tab -->
+    <div id="settings-tab-status" style="display:none">
+      <div style="font-size:14px;color:var(--muted);margin-bottom:12px">Wähle deinen Status:</div>
+      <div class="status-picker">
+        <div class="status-opt" onclick="setStatus('online')">
+          <span class="status-dot-lg status-online"></span>
+          <div><div style="font-weight:600">Online</div><div style="font-size:12px;color:var(--muted)">Du bist sichtbar</div></div>
+        </div>
+        <div class="status-opt" onclick="setStatus('away')">
+          <span class="status-dot-lg status-away"></span>
+          <div><div style="font-weight:600">Abwesend</div><div style="font-size:12px;color:var(--muted)">Nicht aktiv gerade</div></div>
+        </div>
+        <div class="status-opt" onclick="setStatus('dnd')">
+          <span class="status-dot-lg status-dnd"></span>
+          <div><div style="font-weight:600">Nicht stören</div><div style="font-size:12px;color:var(--muted)">Keine Benachrichtigungen</div></div>
+        </div>
+        <div class="status-opt" onclick="setStatus('invisible')">
+          <span class="status-dot-lg status-invisible"></span>
+          <div><div style="font-weight:600">Unsichtbar</div><div style="font-size:12px;color:var(--muted)">Erscheinst als offline</div></div>
+        </div>
       </div>
     </div>
-
-    <div class="form-group">
-      <label>Avatar-Farbe</label>
-      <div class="color-picker" id="color-picker"></div>
-    </div>
-
-    <div class="form-group">
-      <label>Benutzername</label>
-      <input type="text" id="set-username" maxlength="32"/>
-    </div>
-    <div class="form-group">
-      <label>Bio</label>
-      <textarea id="set-bio" placeholder="Erzähl was über dich…" maxlength="200"></textarea>
-    </div>
-    <div id="set-err" class="error-msg"></div>
-    <div id="set-suc" class="success-msg"></div>
-    <button class="btn btn-primary" onclick="saveSettings()">Speichern</button>
-
-    <div class="divider"></div>
-    <div style="font-size:14px;font-weight:700;margin-bottom:12px">Passwort ändern</div>
-    <div class="form-group"><label>Aktuelles Passwort</label><input type="password" id="set-pw-cur" placeholder="••••••••"/></div>
-    <div class="form-group"><label>Neues Passwort</label><input type="password" id="set-pw-new" placeholder="Mindestens 6 Zeichen"/></div>
-    <div id="set-pw-err" class="error-msg"></div>
-    <div id="set-pw-suc" class="success-msg"></div>
-    <button class="btn btn-secondary" onclick="changePassword()">Passwort ändern</button>
-
-    <div class="divider"></div>
-    <button class="btn btn-danger" onclick="logout()">Abmelden</button>
   </div>
 </div>
 

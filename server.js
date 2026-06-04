@@ -158,6 +158,18 @@ app.put('/api/me/password', auth, (req, res) => {
   res.json({ success: true });
 });
 
+// ── Status ────────────────────────────────────────────────────────────
+app.put('/api/me/status', auth, (req, res) => {
+  const { status } = req.body || {};
+  const valid = ['online','away','dnd','invisible'];
+  if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  const u = users.find(u => u.id === req.user.id);
+  if (u) u.status = status;
+  saveData();
+  io.emit('user-status', { userId: req.user.id, online: status !== 'invisible', status });
+  res.json({ success: true });
+});
+
 // ── Channels & Messages ───────────────────────────────────────────────
 app.get('/api/channels', auth, (req, res) => res.json(channels));
 
@@ -169,6 +181,44 @@ app.get('/api/messages/:channelId', auth, (req, res) => {
     return { ...m, username: u.username || 'Unknown', avatar_color: u.avatar_color || '#7c3aed' };
   });
   res.json(enriched);
+});
+
+app.patch('/api/messages/:id', auth, (req, res) => {
+  const msg = messages.find(m => m.id === Number(req.params.id) && m.user_id === req.user.id);
+  if (!msg) return res.status(404).json({ error: 'Not found' });
+  const { content } = req.body || {};
+  if (!content?.trim() || content.length > 2000) return res.status(400).json({ error: 'Invalid content' });
+  msg.content = content.trim();
+  msg.edited = true;
+  saveData();
+  io.to(`ch:${msg.channel_id}`).emit('message-edited', { id: msg.id, content: msg.content, channel_id: msg.channel_id });
+  res.json({ success: true });
+});
+
+app.delete('/api/messages/:id', auth, (req, res) => {
+  const idx = messages.findIndex(m => m.id === Number(req.params.id) && m.user_id === req.user.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  const msg = messages[idx];
+  messages.splice(idx, 1);
+  saveData();
+  io.to(`ch:${msg.channel_id}`).emit('message-deleted', { id: msg.id, channel_id: msg.channel_id });
+  res.json({ success: true });
+});
+
+app.post('/api/messages/:id/react', auth, (req, res) => {
+  const msg = messages.find(m => m.id === Number(req.params.id));
+  if (!msg) return res.status(404).json({ error: 'Not found' });
+  const { emoji } = req.body || {};
+  if (!emoji) return res.status(400).json({ error: 'No emoji' });
+  if (!msg.reactions) msg.reactions = {};
+  if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+  const idx = msg.reactions[emoji].indexOf(req.user.id);
+  if (idx === -1) msg.reactions[emoji].push(req.user.id);
+  else msg.reactions[emoji].splice(idx, 1);
+  if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+  saveData();
+  io.to(`ch:${msg.channel_id}`).emit('message-reaction', { id: msg.id, channel_id: msg.channel_id, reactions: msg.reactions });
+  res.json({ reactions: msg.reactions });
 });
 
 // ── Friends ───────────────────────────────────────────────────────────

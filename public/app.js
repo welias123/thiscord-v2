@@ -217,6 +217,40 @@ async function openDM(uid, name, color) {
 }
 
 // ── Message rendering ─────────────────────────────────────────────────
+function buildMsgHTML(m, grouped, isDM) {
+  const date = new Date(m.created_at * 1000);
+  const timeStr = date.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+  const uid = isDM ? m.sender_id : m.user_id;
+  const isMe = uid === me.id;
+  const chId = isDM ? null : m.channel_id;
+  const bio  = m.bio || '';
+  return `
+    <div class="msg${grouped?' msg-grouped':''}" data-msg-id="${m.id}">
+      ${grouped ? `<span class="msg-time-small">${timeStr}</span>` : ''}
+      <div class="msg-avatar" style="background:${m.avatar_color};cursor:pointer"
+           onclick="showProfile(${uid},'${esc(m.username)}','${m.avatar_color}','${esc(bio)}',${m.created_at||0},this)">
+        ${grouped ? '' : m.username[0].toUpperCase()}
+      </div>
+      <div class="msg-body">
+        ${grouped ? '' : `<div class="msg-header">
+          <span class="msg-author" style="color:${m.avatar_color};cursor:pointer"
+                onclick="showProfile(${uid},'${esc(m.username)}','${m.avatar_color}','${esc(bio)}',${m.created_at||0},this)">
+            ${esc(m.username)}
+          </span>
+          <span class="msg-time">${timeStr}</span>
+          ${m.edited ? '<span class="msg-edited">(bearbeitet)</span>' : ''}
+        </div>`}
+        <div class="msg-content">${esc(m.content)}</div>
+        ${renderReactions(m.reactions, m.id, chId)}
+      </div>
+      ${!isDM ? `<div class="msg-actions">
+        <button class="msg-action-btn" title="Reaktion" onclick="toggleEmojiPicker(${m.id},${chId},this)">😊</button>
+        ${isMe ? `<button class="msg-action-btn" title="Bearbeiten" onclick="editMessage(${m.id},${chId})">✏️</button>
+        <button class="msg-action-btn danger" title="Löschen" onclick="deleteMessage(${m.id},${chId})">🗑️</button>` : ''}
+      </div>` : ''}
+    </div>`;
+}
+
 function renderMessages(msgs, isDM = false) {
   const area = document.getElementById('messages-area');
   if (!msgs.length) { area.innerHTML = '<div class="day-divider">Noch keine Nachrichten</div>'; return; }
@@ -225,22 +259,9 @@ function renderMessages(msgs, isDM = false) {
   msgs.forEach(m => {
     const date = new Date(m.created_at * 1000);
     const dateStr = date.toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' });
-    if (dateStr !== lastDate) {
-      html += `<div class="day-divider">${dateStr}</div>`;
-      lastDate = dateStr; lastAuthor = null;
-    }
+    if (dateStr !== lastDate) { html += `<div class="day-divider">${dateStr}</div>`; lastDate = dateStr; lastAuthor = null; }
     const grouped = m.username === lastAuthor;
-    const timeStr = date.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
-    const authorId = isDM ? m.sender_id : m.user_id;
-    html += `
-      <div class="msg${grouped?' msg-grouped':''}">
-        ${grouped ? `<span class="msg-time-small">${timeStr}</span>` : ''}
-        <div class="msg-avatar" style="background:${m.avatar_color}">${grouped?'':m.username[0].toUpperCase()}</div>
-        <div class="msg-body">
-          ${grouped ? '' : `<div class="msg-header"><span class="msg-author" style="color:${m.avatar_color}">${esc(m.username)}</span><span class="msg-time">${timeStr}</span></div>`}
-          <div class="msg-content">${esc(m.content)}</div>
-        </div>
-      </div>`;
+    html += buildMsgHTML(m, grouped, isDM);
     lastAuthor = m.username;
   });
   area.innerHTML = html;
@@ -250,20 +271,11 @@ function renderMessages(msgs, isDM = false) {
 function appendMessage(m, isDM = false) {
   const area = document.getElementById('messages-area');
   const last = area.querySelector('.msg:last-child');
-  const lastAuthor = last?.querySelector('.msg-author')?.textContent;
+  const lastAuthor = last?.querySelector('.msg-author')?.textContent?.trim();
   const grouped = lastAuthor === m.username;
-  const date = new Date(m.created_at * 1000);
-  const timeStr = date.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
   const div = document.createElement('div');
-  div.className = `msg${grouped?' msg-grouped':''}`;
-  div.innerHTML = `
-    ${grouped ? `<span class="msg-time-small">${timeStr}</span>` : ''}
-    <div class="msg-avatar" style="background:${m.avatar_color}">${grouped?'':m.username[0].toUpperCase()}</div>
-    <div class="msg-body">
-      ${grouped ? '' : `<div class="msg-header"><span class="msg-author" style="color:${m.avatar_color}">${esc(m.username)}</span><span class="msg-time">${timeStr}</span></div>`}
-      <div class="msg-content">${esc(m.content)}</div>
-    </div>`;
-  area.appendChild(div);
+  div.innerHTML = buildMsgHTML(m, grouped, isDM);
+  area.appendChild(div.firstElementChild);
   area.scrollTop = area.scrollHeight;
 }
 
@@ -316,6 +328,27 @@ function connectSocket() {
   socket.on('friend-request', ({ from }) => {
     toast(`👋 Freundschaftsanfrage von ${from.username}!`, 'info');
     loadDMs();
+  });
+
+  socket.on('message-edited', ({ id, content }) => {
+    const el = document.querySelector(`[data-msg-id="${id}"] .msg-content`);
+    if (el) { el.innerHTML = esc(content); }
+    const hdr = document.querySelector(`[data-msg-id="${id}"] .msg-header`);
+    if (hdr && !hdr.querySelector('.msg-edited')) hdr.insertAdjacentHTML('beforeend','<span class="msg-edited">(bearbeitet)</span>');
+  });
+
+  socket.on('message-deleted', ({ id }) => {
+    document.querySelector(`[data-msg-id="${id}"]`)?.remove();
+  });
+
+  socket.on('message-reaction', ({ id, reactions }) => {
+    const el = document.querySelector(`[data-msg-id="${id}"]`);
+    if (!el) return;
+    const chId = activeView?.id;
+    let reactEl = el.querySelector('.msg-reactions');
+    const newHTML = renderReactions(reactions, id, chId);
+    if (reactEl) reactEl.outerHTML = newHTML || '';
+    else if (newHTML) el.querySelector('.msg-body')?.insertAdjacentHTML('beforeend', newHTML);
   });
 
   socket.on('friend-accepted', ({ by }) => {
@@ -444,6 +477,210 @@ async function removeFriend(id) {
   await api('DELETE', `/api/friends/${id}`);
   toast('Freund entfernt.', 'info');
   await refreshFriends();
+}
+
+// ── Settings Tabs ─────────────────────────────────────────────────────
+function switchSettingsTab(tab, btn) {
+  ['profile','audio','status'].forEach(t => {
+    document.getElementById(`settings-tab-${t}`).style.display = t===tab ? '' : 'none';
+  });
+  document.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (tab === 'audio') loadAudioDevices();
+}
+
+// ── Status ────────────────────────────────────────────────────────────
+let myStatus = 'online';
+async function setStatus(status) {
+  myStatus = status;
+  await api('PUT', '/api/me/status', { status });
+  document.querySelectorAll('.status-opt').forEach(el => el.classList.remove('active'));
+  event?.target?.closest('.status-opt')?.classList.add('active');
+  updateStatusDot(status);
+  toast(`Status: ${statusLabel(status)}`, 'info');
+}
+
+function statusLabel(s) {
+  return { online:'Online', away:'Abwesend', dnd:'Nicht stören', invisible:'Unsichtbar' }[s] || s;
+}
+
+function statusColor(s) {
+  return { online:'var(--online)', away:'var(--warn)', dnd:'var(--danger)', invisible:'#666' }[s] || '#666';
+}
+
+function updateStatusDot(status) {
+  const dot = document.getElementById('my-status-dot');
+  if (dot) dot.style.background = statusColor(status);
+}
+
+// ── Audio Settings ────────────────────────────────────────────────────
+let micTestStream = null, micTestAnim = null;
+let selectedMicId = localStorage.getItem('tc-mic-id') || '';
+let selectedSpeakerId = localStorage.getItem('tc-speaker-id') || '';
+let micGain = Number(localStorage.getItem('tc-mic-volume') || 100);
+
+async function loadAudioDevices() {
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter(d => d.kind === 'audioinput');
+    const speakers = devices.filter(d => d.kind === 'audiooutput');
+
+    const micSel = document.getElementById('audio-mic-select');
+    const spkSel = document.getElementById('audio-speaker-select');
+    micSel.innerHTML = mics.map(d => `<option value="${d.deviceId}" ${d.deviceId===selectedMicId?'selected':''}>${d.label||'Mikrofon '+d.deviceId.slice(0,6)}</option>`).join('');
+    spkSel.innerHTML = speakers.length
+      ? speakers.map(d => `<option value="${d.deviceId}" ${d.deviceId===selectedSpeakerId?'selected':''}>${d.label||'Lautsprecher '+d.deviceId.slice(0,6)}</option>`).join('')
+      : '<option value="">Standard-Ausgabe</option>';
+
+    document.getElementById('mic-volume').value = micGain;
+    document.getElementById('mic-vol-label').textContent = micGain;
+    document.getElementById('mic-volume').addEventListener('input', e => {
+      micGain = e.target.value;
+      document.getElementById('mic-vol-label').textContent = micGain;
+    });
+  } catch { toast('Mikrofon-Zugriff verweigert', 'error'); }
+}
+
+async function startMicTest() {
+  try {
+    const micId = document.getElementById('audio-mic-select').value;
+    micTestStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: micId ? { exact: micId } : undefined } });
+    const ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(micTestStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const fill = document.getElementById('audio-test-fill');
+    document.getElementById('audio-test-btn').style.display = 'none';
+    document.getElementById('audio-stop-btn').style.display = '';
+    function draw() {
+      micTestAnim = requestAnimationFrame(draw);
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      fill.style.width = Math.min(100, avg * 2) + '%';
+    }
+    draw();
+  } catch { toast('Mikrofon nicht verfügbar', 'error'); }
+}
+
+function stopMicTest() {
+  cancelAnimationFrame(micTestAnim);
+  micTestStream?.getTracks().forEach(t => t.stop());
+  micTestStream = null;
+  document.getElementById('audio-test-fill').style.width = '0%';
+  document.getElementById('audio-test-btn').style.display = '';
+  document.getElementById('audio-stop-btn').style.display = 'none';
+}
+
+function saveAudioSettings() {
+  selectedMicId = document.getElementById('audio-mic-select').value;
+  selectedSpeakerId = document.getElementById('audio-speaker-select').value;
+  localStorage.setItem('tc-mic-id', selectedMicId);
+  localStorage.setItem('tc-speaker-id', selectedSpeakerId);
+  localStorage.setItem('tc-mic-volume', micGain);
+  stopMicTest();
+  toast('Audio-Einstellungen gespeichert!', 'success');
+}
+
+// ── Edit / Delete messages ────────────────────────────────────────────
+async function editMessage(id, channelId) {
+  const contentEl = document.querySelector(`[data-msg-id="${id}"] .msg-content`);
+  if (!contentEl) return;
+  const old = contentEl.textContent;
+  contentEl.innerHTML = `
+    <textarea class="msg-edit-input" id="edit-${id}">${esc(old)}</textarea>
+    <div class="msg-edit-actions">
+      <span onclick="submitEdit(${id},${channelId})" style="color:var(--purple)">✓ Speichern</span>
+      &nbsp;·&nbsp;
+      <span onclick="cancelEdit(${id},'${esc(old)}')">✕ Abbrechen</span>
+      <span style="margin-left:8px;font-size:11px">Enter=Senden, Esc=Abbrechen</span>
+    </div>`;
+  const ta = document.getElementById(`edit-${id}`);
+  ta.focus(); ta.selectionStart = ta.value.length;
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(id, channelId); }
+    if (e.key === 'Escape') cancelEdit(id, old);
+  });
+}
+
+async function submitEdit(id, channelId) {
+  const ta = document.getElementById(`edit-${id}`);
+  const content = ta?.value.trim();
+  if (!content) return;
+  try {
+    await api('PATCH', `/api/messages/${id}`, { content });
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function cancelEdit(id, old) {
+  const contentEl = document.querySelector(`[data-msg-id="${id}"] .msg-content`);
+  if (contentEl) contentEl.innerHTML = esc(old);
+}
+
+async function deleteMessage(id, channelId) {
+  if (!confirm('Nachricht löschen?')) return;
+  try { await api('DELETE', `/api/messages/${id}`); }
+  catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Emoji reactions ───────────────────────────────────────────────────
+const QUICK_EMOJIS = ['👍','❤️','😂','😮','😢','🔥','🎉','👏','💯','😎','🤔','😡'];
+let emojiPickerTarget = null;
+
+function toggleEmojiPicker(msgId, channelId, btn) {
+  const existing = document.getElementById('emoji-picker-popup');
+  if (existing) { existing.remove(); if (emojiPickerTarget === msgId) { emojiPickerTarget=null; return; } }
+  emojiPickerTarget = msgId;
+  const picker = document.createElement('div');
+  picker.className = 'emoji-picker'; picker.id = 'emoji-picker-popup';
+  picker.innerHTML = QUICK_EMOJIS.map(e => `<button class="emoji-btn" onclick="reactMessage(${msgId},${channelId},'${e}');document.getElementById('emoji-picker-popup')?.remove()">${e}</button>`).join('');
+  const rect = btn.getBoundingClientRect();
+  picker.style.cssText = `position:fixed;bottom:${window.innerHeight-rect.top+4}px;left:${rect.left}px`;
+  document.body.appendChild(picker);
+  setTimeout(() => document.addEventListener('click', function h(e){ if(!picker.contains(e.target)){picker.remove();document.removeEventListener('click',h);} }), 100);
+}
+
+async function reactMessage(msgId, channelId, emoji) {
+  try { await api('POST', `/api/messages/${msgId}/react`, { emoji }); }
+  catch(e) { toast(e.message, 'error'); }
+}
+
+function renderReactions(reactions, msgId, channelId) {
+  if (!reactions || !Object.keys(reactions).length) return '';
+  return '<div class="msg-reactions">' +
+    Object.entries(reactions).map(([emoji, userIds]) => {
+      const mine = userIds.includes(me.id);
+      return `<span class="reaction${mine?' mine':''}" onclick="reactMessage(${msgId},${channelId},'${emoji}')">${emoji} <span class="reaction-count">${userIds.length}</span></span>`;
+    }).join('') +
+  '</div>';
+}
+
+// ── Profile popup ─────────────────────────────────────────────────────
+function showProfile(userId, username, avatarColor, bio, createdAt, anchorEl) {
+  document.getElementById('profile-popup-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'profile-popup-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:490';
+  overlay.onclick = () => overlay.remove();
+  const date = new Date((createdAt||0)*1000).toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+  const rect = anchorEl.getBoundingClientRect();
+  const left = Math.min(rect.right+8, window.innerWidth-260);
+  const top  = Math.max(8, Math.min(rect.top, window.innerHeight-240));
+  overlay.innerHTML = `
+    <div class="profile-popup" style="position:fixed;left:${left}px;top:${top}px" onclick="event.stopPropagation()">
+      <div class="profile-banner"></div>
+      <div class="profile-body">
+        <div class="profile-avatar-wrap">
+          <div class="profile-avatar-big" style="background:${avatarColor}">${username[0].toUpperCase()}</div>
+        </div>
+        <div class="profile-name">${esc(username)}</div>
+        ${bio ? `<div class="profile-bio">${esc(bio)}</div>` : ''}
+        <div class="profile-joined">Dabei seit ${date}</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
 }
 
 // ── Settings Modal ────────────────────────────────────────────────────

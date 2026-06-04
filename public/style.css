@@ -257,6 +257,69 @@ textarea { resize:vertical; min-height:80px; font-family:inherit; }
 .toast.error { border-color:rgba(239,68,68,.4); color:#fca5a5; }
 .toast.info { border-color:rgba(124,58,237,.4); color:#c4b5fd; }
 
+/* Status dots */
+.status-dot-lg { width:12px; height:12px; border-radius:50%; border:2px solid var(--sidebar); display:inline-block; }
+.status-online  { background:var(--online); }
+.status-away    { background:var(--warn); }
+.status-dnd     { background:var(--danger); }
+.status-invisible { background:#666; }
+
+/* Status picker */
+.status-picker { display:flex; flex-direction:column; gap:4px; margin-top:8px; }
+.status-opt { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:14px; transition:.15s; }
+.status-opt:hover { background:var(--surface2); }
+.status-opt.active { background:var(--surface2); font-weight:700; }
+
+/* Message hover menu */
+.msg { position:relative; }
+.msg-actions { position:absolute; right:8px; top:4px; display:none; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:2px 4px; gap:2px; align-items:center; }
+.msg:hover .msg-actions { display:flex; }
+.msg-action-btn { background:none; border:none; cursor:pointer; color:var(--muted); font-size:15px; padding:4px 6px; border-radius:6px; transition:.15s; line-height:1; }
+.msg-action-btn:hover { background:var(--border); color:var(--text); }
+.msg-action-btn.danger:hover { color:var(--danger); }
+
+/* Edited tag */
+.msg-edited { font-size:10px; color:var(--muted); margin-left:4px; }
+
+/* Inline edit */
+.msg-edit-input { width:100%; background:var(--bg); border:1px solid var(--purple); border-radius:8px; color:var(--text); font-size:14px; padding:6px 10px; outline:none; font-family:inherit; resize:none; margin-top:4px; }
+.msg-edit-actions { display:flex; gap:6px; margin-top:4px; font-size:12px; color:var(--muted); }
+.msg-edit-actions span { cursor:pointer; }
+.msg-edit-actions span:hover { color:var(--text); }
+
+/* Emoji reactions */
+.msg-reactions { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+.reaction { display:flex; align-items:center; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:2px 8px; cursor:pointer; font-size:13px; transition:.15s; }
+.reaction:hover { border-color:var(--purple); background:rgba(124,58,237,.15); }
+.reaction.mine { border-color:var(--purple); background:rgba(124,58,237,.2); }
+.reaction-count { font-size:12px; color:var(--muted); }
+
+/* Emoji picker */
+.emoji-picker { position:absolute; background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:8px; display:flex; flex-wrap:wrap; gap:4px; z-index:200; box-shadow:0 8px 24px rgba(0,0,0,.4); width:220px; }
+.emoji-btn { font-size:20px; padding:4px; border-radius:6px; cursor:pointer; transition:.1s; background:none; border:none; }
+.emoji-btn:hover { background:var(--border); }
+
+/* Unread badge */
+.channel-item .unread-badge { background:var(--danger); }
+.unread-dot { width:8px; height:8px; border-radius:50%; background:var(--purple); margin-left:auto; flex-shrink:0; }
+
+/* Profile popup */
+.profile-popup { position:absolute; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:0; overflow:hidden; width:240px; z-index:500; box-shadow:0 8px 32px rgba(0,0,0,.5); }
+.profile-banner { height:60px; background:linear-gradient(135deg,#4c1d95,#7c3aed); }
+.profile-body { padding:0 16px 16px; }
+.profile-avatar-wrap { margin-top:-24px; margin-bottom:8px; }
+.profile-avatar-big { width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:800; color:#fff; border:4px solid var(--surface); }
+.profile-name { font-size:16px; font-weight:800; }
+.profile-bio { font-size:13px; color:var(--muted); margin-top:4px; }
+.profile-joined { font-size:11px; color:var(--muted); margin-top:8px; }
+
+/* Audio settings */
+.audio-test-bar { height:8px; background:var(--bg); border-radius:4px; overflow:hidden; margin-top:6px; }
+.audio-test-fill { height:100%; background:var(--purple); width:0%; border-radius:4px; transition:width .1s; }
+.settings-tabs { display:flex; gap:4px; background:var(--bg); border-radius:10px; padding:4px; margin-bottom:20px; }
+.settings-tab { flex:1; padding:7px; border:none; background:none; color:var(--muted); border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; transition:.2s; }
+.settings-tab.active { background:var(--purple); color:#fff; }
+
 /* Voice channels */
 .voice-channel-item {
   display:flex; flex-direction:column; padding:6px 10px; border-radius:8px;
