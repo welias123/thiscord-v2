@@ -8,6 +8,7 @@ const jwt      = require('jsonwebtoken');
 const cors     = require('cors');
 const path     = require('path');
 const fs       = require('fs');
+const { execSync } = require('child_process');
 
 const app    = express();
 const server = http.createServer(app);
@@ -57,6 +58,25 @@ loadData();
 setInterval(saveData, 15000);
 process.on('SIGTERM', () => { saveData(); process.exit(0); });
 process.on('SIGINT',  () => { saveData(); process.exit(0); });
+
+// ── Auto-Update Webhook ───────────────────────────────────────────────
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'thiscord-webhook-2026';
+
+app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+  const sig = req.headers['x-webhook-secret'];
+  if (sig !== WEBHOOK_SECRET) return res.status(403).json({ error: 'Forbidden' });
+  res.json({ ok: true });
+  console.log('[webhook] Update received — pulling and restarting…');
+  setTimeout(() => {
+    try {
+      execSync('git pull', { cwd: __dirname, stdio: 'inherit' });
+      execSync('npm install --production', { cwd: __dirname, stdio: 'inherit' });
+      execSync('pm2 restart thiscord', { stdio: 'inherit' });
+    } catch (e) {
+      console.error('[webhook] Update failed:', e.message);
+    }
+  }, 500);
+});
 
 // ── Middleware ────────────────────────────────────────────────────────
 app.use(cors());
